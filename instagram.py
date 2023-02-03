@@ -9,6 +9,8 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import TimeoutException
 from decouple import config
+import json
+
 
 # Setup a .env file in the current directory
 # like
@@ -24,9 +26,6 @@ TIMEOUT = 25
 
 def scrape():
     usr = input('[Required] - Whose followers do you want to scrape: ')
-
-    user_input = int(
-        input('[Required] - How many followers do you want to scrape (60-500 recommended): '))
 
     options = webdriver.ChromeOptions()
     # options.add_argument("--headless")
@@ -82,32 +81,39 @@ def scrape():
 
     login_button.click()
 
-    time.sleep(10)
+    time.sleep(5)
 
     current_url = bot.current_url
     if current_url == "https://www.instagram.com/accounts/login/two_factor?next=%2F":
         print("Two-factor authentication is required")
         otp = input('[Required] - Enter OTP: ')
 
-        # find matching dive element mount_0_0_
-        current_div_id = bot.find_element_by_xpath(
-            "//div[starts-with(@id, 'mount_0_0_')]").get_attribute("id")
-
         otp_element = WebDriverWait(bot, TIMEOUT).until(
             EC.presence_of_element_located((
-                By.XPATH, f'//*[@id="{current_div_id}"]/div/div/div/div[1]/div/div/div/div[1]/section/main/div[1]/div/div/div[2]/form/div[1]/div/label/input')))
+                By.XPATH, '//div[starts-with(@id, "mount_0_0_")]/div/div/div/div[1]/div/div/div/div[1]/section/main/div[1]/div/div/div[2]/form/div[1]/div/label/input')))
         otp_element.send_keys(otp)
         otp_button = WebDriverWait(bot, TIMEOUT).until(
             EC.presence_of_element_located((
-                By.XPATH, '//*[@id="mount_0_0_I2"]/div/div/div/div[1]/div/div/div/div[1]/section/main/div[1]/div/div/div[2]/form/div[2]/button')))
+                By.XPATH, '//div[starts-with(@id, "mount_0_0_")]/div/div/div/div[1]/div/div/div/div[1]/section/main/div[1]/div/div/div[2]/form/div[2]/button')))
         time.sleep(0.4)
         otp_button.click()
     else:
         print("Two-factor authentication is not required")
 
-    time.sleep(10)
-
     bot.get('https://www.instagram.com/{}/'.format(usr))
+
+    followersCount = WebDriverWait(bot, TIMEOUT).until(
+        EC.presence_of_element_located((
+            By.XPATH, '//div[starts-with(@id, "mount_0_0_")]/div/div/div/div[1]/div/div/div/div[1]/div[1]/div[2]/section/main/div/header/section/ul/li[2]/a/div/span')))
+
+    followingCount = WebDriverWait(bot, TIMEOUT).until(
+        EC.presence_of_element_located((
+            By.XPATH, '//div[starts-with(@id, "mount_0_0_")]/div/div/div/div[1]/div/div/div/div[1]/div[1]/div[2]/section/main/div/header/section/ul/li[3]/a/div/span')))
+
+    print('[Info] - Followers: {}'.format(followersCount.text))
+    print('[Info] - Following: {}'.format(followingCount.text))
+
+    totalFollowing = int(followingCount.text)
 
     time.sleep(3.5)
 
@@ -121,28 +127,54 @@ def scrape():
 
     users = set()
 
-    for _ in range(round(user_input // 20)):
+    for _ in range(round(totalFollowing // 20)):
 
         ActionChains(bot).send_keys(Keys.END).perform()
 
-        time.sleep(1)
+        time.sleep(3)
 
-    followers = bot.find_elements(By.XPATH,
+    following = bot.find_elements(By.XPATH,
                                   "//a[contains(@href, '/')]")
 
     # Getting url from href attribute
-    for i in followers:
+    for i in following:
         if i.get_attribute('href'):
-            users.add(i.get_attribute('href').split("/")[3])
+            if i.get_attribute('href').split("/")[3] != '':
+                users.add(i.get_attribute('href').split("/")[3])
         else:
             continue
 
     print('[Info] - Saving...')
-    print('[DONE] - Your followers are saved in followers.txt file!')
+    time.sleep(5)
+    print("Total users: " + str(len(users)))
+    compare_and_update_following_users(users, usr)
+    print('[DONE] - Your followers are saved in following' +
+          "_" + usr + '.json file!')
 
-    with open('followers.txt', 'a') as file:
-        file.write('\n'.join(users) + "\n")
 
+def compare_and_update_following_users(users, usr):
+    try:
+        with open("following" + "_" + usr + ".json", "r") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        data = {"new": [], "old": [], "unfollowed": []}
+
+    old_users = data["new"]
+    new_users = []
+
+    for user in users:
+        if user in old_users:
+            data["old"].append(user)
+            old_users.remove(user)
+        else:
+            new_users.append(user)
+
+    #find unfollowed users
+    data["unfollowed"] = old_users
+    data["new"] = new_users
+
+    with open("following" + "_" + usr + ".json", "w") as f:
+        json.dump(data, f)
 
 if __name__ == '__main__':
     scrape()
