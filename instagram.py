@@ -25,7 +25,8 @@ TIMEOUT = 25
 
 
 def scrape():
-    usr = input('[Required] - Whose followers do you want to scrape: ')
+    usr = "rushikesh.korgaonkar"
+    #usr = input('[Required] - Whose followers do you want to scrape: ')
 
     options = webdriver.ChromeOptions()
     # options.add_argument("--headless")
@@ -81,7 +82,7 @@ def scrape():
 
     login_button.click()
 
-    time.sleep(5)
+    time.sleep(10)
 
     current_url = bot.current_url
     if current_url == "https://www.instagram.com/accounts/login/two_factor?next=%2F":
@@ -145,11 +146,33 @@ def scrape():
             continue
 
     print('[Info] - Saving...')
-    time.sleep(5)
+    time.sleep(4)
     print("Total users: " + str(len(users)))
+
+    print('[Info] - Checking existing file...')
+    refresh_existing_following_users(usr)
+
+    print('[DONE] - Your followers are being saved in following' +
+          "_" + usr + '.json file!')
     compare_and_update_following_users(users, usr)
     print('[DONE] - Your followers are saved in following' +
           "_" + usr + '.json file!')
+
+
+def refresh_existing_following_users(usr):
+    try:
+        with open("following" + "_" + usr + ".json", "r") as f:
+            data = json.load(f)
+            last_new_users = data["new"]
+            for user in last_new_users:
+                data["old"].append(user)
+            data["new"] = []
+
+        with open("following" + "_" + usr + ".json", "w") as f:
+            json.dump(data, f)
+    except FileNotFoundError:
+        print("No existing File found.")
+        return
 
 
 def compare_and_update_following_users(users, usr):
@@ -159,7 +182,8 @@ def compare_and_update_following_users(users, usr):
     except FileNotFoundError:
         data = {"new": [], "old": [], "unfollowed": []}
 
-    old_users = data["new"]
+    old_users = data["old"]
+    data["old"] = []
     new_users = []
 
     for user in users:
