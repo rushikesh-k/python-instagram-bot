@@ -1,4 +1,5 @@
 import time
+import json
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -9,7 +10,6 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import TimeoutException
 from decouple import config
-import json
 
 
 # Setup a .env file in the current directory
@@ -82,7 +82,7 @@ def scrape():
 
     login_button.click()
 
-    time.sleep(10)
+    time.sleep(5)
 
     current_url = bot.current_url
     if current_url == "https://www.instagram.com/accounts/login/two_factor?next=%2F":
@@ -122,83 +122,110 @@ def scrape():
         EC.presence_of_element_located((
             By.XPATH, "//a[contains(@href, '/following')]"))).click()
 
-    time.sleep(2)
+    time.sleep(5)
 
     print('[Info] - Scraping...')
 
     users = set()
 
     for _ in range(round(totalFollowing // 20)):
-
         ActionChains(bot).send_keys(Keys.END).perform()
-
         time.sleep(3)
 
     following = bot.find_elements(By.XPATH,
                                   "//a[contains(@href, '/')]")
 
+    time.sleep(5)
     # Getting url from href attribute
+    skipElements = ["", "about", "blog",
+                    "direct", "docs", "legal" "object_videos", "reels", "explore"]
+
     for i in following:
         if i.get_attribute('href'):
-            if i.get_attribute('href').split("/")[3] != '':
+            if i.get_attribute('href').split("/")[3] not in skipElements:
                 users.add(i.get_attribute('href').split("/")[3])
         else:
             continue
 
-    print('[Info] - Saving...')
-    time.sleep(4)
-    print("Total users: " + str(len(users)))
+    print("[Info] - Total users: " + str(len(users)))
+    time.sleep(5)   
 
-    print('[Info] - Checking existing file...')
     refresh_existing_following_users(usr)
-
-    print('[DONE] - Your followers are being saved in following' +
-          "_" + usr + '.json file!')
+    time.sleep(5)
     compare_and_update_following_users(users, usr)
-    print('[DONE] - Your followers are saved in following' +
-          "_" + usr + '.json file!')
+    
 
 
 def refresh_existing_following_users(usr):
+    print('[Info] - refresh_existing_following_users...')
     try:
         with open("following" + "_" + usr + ".json", "r") as f:
             data = json.load(f)
-            last_new_users = data["new"]
-            for user in last_new_users:
+
+        last_new_users = data["new"]
+        for user in last_new_users:
+            if user not in data["old"]:
                 data["old"].append(user)
-            data["new"] = []
+
+        data["old"] = list(dict.fromkeys(data["old"]))
+        data["new"] = []
+        
+        #copy elements from data["unfollowed"] to data["archieved"]
+        for user in data["unfollowed"]:
+            if user not in data["archieved"]:
+                data["archieved"].append(user)
+        data["unfollowed"] = []
 
         with open("following" + "_" + usr + ".json", "w") as f:
             json.dump(data, f)
+            f.flush()            
+            print("[Info] - refresh_existing_following_users : Done")
     except FileNotFoundError:
-        print("No existing File found.")
+        print("refresh_existing_following_users : No existing File found.")
         return
 
-
 def compare_and_update_following_users(users, usr):
+    print('[Info] - compare_and_update_following_users...')
+    print('[DONE] - Your followers are being saved in following' +
+          "_" + usr + '.json file!')
     try:
         with open("following" + "_" + usr + ".json", "r") as f:
             data = json.load(f)
     except FileNotFoundError:
-        data = {"new": [], "old": [], "unfollowed": []}
+        print("compare_and_update_following_users : No existing File found.")
+        data = {"new": [], "old": [], "unfollowed": [], "archieved": []}
 
     old_users = data["old"]
-    data["old"] = []
+    last_new_users = data["new"]
     new_users = []
 
-    for user in users:
-        if user in old_users:
-            data["old"].append(user)
-            old_users.remove(user)
-        else:
-            new_users.append(user)
+    print("Old users: " + str(len(old_users)))
+    print("New users: " + str(len(last_new_users)))
 
-    #find unfollowed users
-    data["unfollowed"] = old_users
+    #if user in users exists in old_users then let it be there if doesnt exists then move it to new_users
+    for user in users:
+        if user not in old_users:
+            new_users.append(user)
+    
+    #if user in old_users exists in users then let it be there if doesnt exists then move it to unfollowed
+    for user in old_users:
+        if user not in users:
+            data["old"].remove(user)
+            data["unfollowed"].append(user)
+
     data["new"] = new_users
+
+    #set elements in order by alphabetical order
+    data["old"] = sorted(data["old"])
+    data["new"] = sorted(data["new"])
+    data["unfollowed"] = sorted(data["unfollowed"])
+    data["archieved"] = sorted(data["archieved"])
 
     with open("following" + "_" + usr + ".json", "w") as f:
         json.dump(data, f)
+        f.flush()
+        print('[DONE] - Your followers are saved in following' +
+              "_" + usr + '.json file!')
 
 if __name__ == '__main__':
     scrape()
