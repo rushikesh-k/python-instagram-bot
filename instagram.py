@@ -166,15 +166,17 @@ def refresh_existing_following_users(usr):
         for user in last_new_users:
             if user not in data["old"]:
                 data["old"].append(user)
-
-        data["old"] = list(dict.fromkeys(data["old"]))
-        data["new"] = []
         
         #copy elements from data["unfollowed"] to data["archieved"]
         for user in data["unfollowed"]:
+            if user in data["old"]:
+                data["unfollowed"].remove(user)
             if user not in data["archieved"]:
                 data["archieved"].append(user)
         data["unfollowed"] = []
+
+        data["old"] = list(dict.fromkeys(data["old"]))
+        data["new"] = []
 
         with open("following" + "_" + usr + ".json", "w") as f:
             json.dump(data, f)
